@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Probabilistic CLV Pipeline</title>
+  <script src="https://cdn.jsdelivr.net/npm/mathjs@9.5.2/lib/browser/math.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .controls { margin-bottom: 20px; }
+    .controls section { margin-bottom: 15px; }
+    .controls label { display: inline-block; width: 180px; }
+    .charts { display: flex; flex-wrap: wrap; gap: 20px; }
+    .chart-container { flex: 1; min-width: 300px; }
+    .summary { margin-top: 30px; font-size: 1.1em; }
+    .summary li { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h2>Probabilistic CLV Pipeline</h2>
+  <div class="controls">
+    <section>
+      <strong>Retention (Beta-Geometric)</strong><br>
+      <label for="alphaR">Alpha (retention):</label>
+      <input type="range" id="alphaR" min="0.1" max="10" step="0.1" value="1">
+      <span id="alphaRVal">1.0</span><br>
+      <label for="betaR">Beta (retention):</label>
+      <input type="range" id="betaR" min="0.1" max="10" step="0.1" value="1">
+      <span id="betaRVal">1.0</span><br>
+      <label for="periods">Horizon (periods):</label>
+      <input type="range" id="periods" min="1" max="50" step="1" value="10">
+      <span id="periodsVal">10</span>
+    </section>
+    <section>
+      <strong>Frequency (NBD)</strong><br>
+      <label for="alphaF">Alpha (freq):</label>
+      <input type="range" id="alphaF" min="0.1" max="10" step="0.1" value="1">
+      <span id="alphaFVal">1.0</span><br>
+      <label for="betaF">Beta (freq):</label>
+      <input type="range" id="betaF" min="0.1" max="10" step="0.1" value="1">
+      <span id="betaFVal">1.0</span>
+    </section>
+    <section>
+      <strong>Monetary (Gamma-Gamma)</strong><br>
+      <label for="shapeM">Shape (p):</label>
+      <input type="range" id="shapeM" min="0.1" max="10" step="0.1" value="2">
+      <span id="shapeMVal">2.0</span><br>
+      <label for="scaleM">Scale (q):</label>
+      <input type="range" id="scaleM" min="0.1" max="10" step="0.1" value="1">
+      <span id="scaleMVal">1.0</span>
+    </section>
+  </div>
+
+  <div class="charts">
+    <div class="chart-container">
+      <h4>Retention Probability</h4>
+      <canvas id="retChart" width="300" height="200"></canvas>
+    </div>
+    <div class="chart-container">
+      <h4>Frequency Distribution (NBD)</h4>
+      <canvas id="freqChart" width="300" height="200"></canvas>
+    </div>
+    <div class="chart-container">
+      <h4>Monetary PDF</h4>
+      <canvas id="monChart" width="300" height="200"></canvas>
+    </div>
+  </div>
+
+  <div class="summary">
+    <h3>Final CLV Calculations</h3>
+    <ul>
+      <li>Expected transactions (BG retention sum): <strong>$<span id="E_ret">0.00</span></strong></li>
+      <li>Expected transactions (NBD): <strong>$<span id="E_nbd">0.00</span></strong></li>
+      <li>Expected order value: <strong>$<span id="E_mon">0.00</span></strong></li>
+      <li>CLV (NBD × Gamma-Gamma): <strong>$<span id="CLV_NBD">0.00</span></strong></li>
+      <li>CLV (Retention-based + discount): <strong>$<span id="CLV_BG">0.00</span></strong></li>
+    </ul>
+  </div>
+
+  <script>
+    // Retention
+    function retentionProb(t, a, b) { return (b + t - 1) / (a + b + t - 1); }
+    function getRetentionData(a, b, periods) {
+      const labels = [], data = [];
+      for (let t = 1; t <= periods; t++) {
+        labels.push(t);
+        data.push(retentionProb(t, a, b));
+      }
+      return { labels, data };
+    }
+    // Frequency NBD PMF
+    function pmfNBD(k, a, b) {
+      return math.gamma(a + k) / (math.gamma(a) * math.factorial(k))
+           * Math.pow(b / (b + 1), a) * Math.pow(1 / (b + 1), k);
+    }
+    function getFreqData(a, b, maxk=20) {
+      const labels = [], data = [];
+      for (let k = 0; k <= maxk; k++) {
+        labels.push(k);
+        data.push(pmfNBD(k, a, b));
+      }
+      return { labels, data };
+    }
+    // Monetary Gamma-Gamma PDF
+    function ggPDF(x, p, q) {
+      return Math.pow(q, p) / math.gamma(p) * Math.pow(x, p - 1) * Math.exp(-q * x);
+    }
+    function getMonData(p, q, maxx=20) {
+      const labels = [], data = [];
+      const step = maxx / 100;
+      for (let x = 0; x <= maxx; x += step) {
+        labels.push(x.toFixed(2));
+        data.push(ggPDF(x, p, q));
+      }
+      return { labels, data };
+    }
+
+    // Charts
+    const retCtx  = document.getElementById('retChart').getContext('2d');
+    const freqCtx = document.getElementById('freqChart').getContext('2d');
+    const monCtx  = document.getElementById('monChart').getContext('2d');
+
+    const retChart = new Chart(retCtx, { type: 'line', data: { labels: [], datasets: [{ label: 'P(alive)', data: [], fill:false }] }, options: { scales:{ x:{ title:{display:true,text:'Period'}}, y:{ min:0, max:1 } } } });
+    const freqChart = new Chart(freqCtx,{ type:'bar', data:{ labels:[], datasets:[{ label:'P(X=k)', data:[], backgroundColor:'rgba(75,192,192,0.4)' }] }, options:{ scales:{ x:{ title:{display:true,text:'k'}}, y:{ title:{display:true,text:'Probability'} } } } });
+    const monChart = new Chart(monCtx, { type:'line', data:{ labels:[], datasets:[{ label:'f(x)', data:[], fill:false }] }, options:{ scales:{ x:{ title:{display:true,text:'Order Value'}}, y:{ title:{display:true,text:'Density'} } } } });
+
+    // Update all
+    function updateAll() {
+      // Get control values
+      const aR = parseFloat(document.getElementById('alphaR').value);
+      const bR = parseFloat(document.getElementById('betaR').value);
+      const T  = parseInt(document.getElementById('periods').value,10);
+      const aF = parseFloat(document.getElementById('alphaF').value);
+      const bF = parseFloat(document.getElementById('betaF').value);
+      const pM = parseFloat(document.getElementById('shapeM').value);
+      const qM = parseFloat(document.getElementById('scaleM').value);
+      // Update labels
+      document.getElementById('alphaRVal').textContent = aR.toFixed(1);
+      document.getElementById('betaRVal').textContent  = bR.toFixed(1);
+      document.getElementById('periodsVal').textContent= T;
+      document.getElementById('alphaFVal').textContent = aF.toFixed(1);
+      document.getElementById('betaFVal').textContent  = bF.toFixed(1);
+      document.getElementById('shapeMVal').textContent= pM.toFixed(1);
+      document.getElementById('scaleMVal').textContent= qM.toFixed(1);
+      // Update charts
+      const retData = getRetentionData(aR,bR,T);
+      retChart.data.labels = retData.labels;
+      retChart.data.datasets[0].data = retData.data;
+      retChart.update();
+      const freqData = getFreqData(aF,bF,Math.min(20,T));
+      freqChart.data.labels = freqData.labels;
+      freqChart.data.datasets[0].data = freqData.data;
+      freqChart.update();
+      const monData = getMonData(pM,qM, Math.min(20,Math.max(5,pM/qM*3)) );
+      monChart.data.labels = monData.labels;
+      monChart.data.datasets[0].data = monData.data;
+      monChart.update();
+      // Summary calculations
+      const E_ret = retData.data.reduce((s,v)=>s+v,0);
+      const E_nbd = aF / bF;
+      const E_mon = pM / qM;
+      const CLV_NBD = (E_nbd * E_mon).toFixed(2);
+      // Discounted retention-based CLV
+      const discount = 0; // no discount here by default
+      const CLV_BG = retData.data.reduce((s,p,i)=> s + p * E_mon / Math.pow(1+discount,i+1), 0).toFixed(2);
+      document.getElementById('E_ret').textContent = E_ret.toFixed(2);
+      document.getElementById('E_nbd').textContent= E_nbd.toFixed(2);
+      document.getElementById('E_mon').textContent = E_mon.toFixed(2);
+      document.getElementById('CLV_NBD').textContent = CLV_NBD;
+      document.getElementById('CLV_BG').textContent  = CLV_BG;
+    }
+    // Attach events
+    ['alphaR','betaR','periods','alphaF','betaF','shapeM','scaleM'].forEach(id=>{
+      document.getElementById(id).addEventListener('input', updateAll);
+    });
+    // Initial
+    updateAll();
+  </script>
+</body>
+</html>
