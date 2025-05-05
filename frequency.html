@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Frequency Models: Poisson vs NBD</title>
+  <script src="https://cdn.jsdelivr.net/npm/mathjs@9.5.2/lib/browser/math.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .controls { margin-bottom: 20px; }
+    .controls label { margin-right: 15px; }
+  </style>
+</head>
+<body>
+  <h2>Frequency Models: Poisson vs Negative Binomial</h2>
+  <div class="controls">
+    <label for="lambda">Lambda (Poisson): <span id="lambdaVal">3</span></label>
+    <input type="range" id="lambda" min="0.1" max="10" step="0.1" value="3">
+    <label for="alpha">Alpha (NBD): <span id="alphaVal">1</span></label>
+    <input type="range" id="alpha" min="0.1" max="10" step="0.1" value="1">
+    <label for="beta">Beta (NBD): <span id="betaVal">1</span></label>
+    <input type="range" id="beta" min="0.1" max="10" step="0.1" value="1"><br><br>
+    <label for="maxk">Max k: <span id="maxkVal">10</span></label>
+    <input type="range" id="maxk" min="1" max="50" step="1" value="10">
+  </div>
+  <canvas id="freqChart" width="800" height="400"></canvas>
+  <script>
+    function pmfPoisson(k, lambda) {
+      return Math.pow(lambda, k) * Math.exp(-lambda) / math.factorial(k);
+    }
+    function pmfNBD(k, alpha, beta) {
+      return math.gamma(alpha + k) / (math.gamma(alpha) * math.factorial(k))
+             * Math.pow(beta, alpha) * Math.pow(1/(beta+1), alpha + k);
+    }
+    function generateData(lambda, alpha, beta, maxk) {
+      const labels = [], dataP = [], dataN = [];
+      for (let k = 0; k <= maxk; k++) {
+        labels.push(k);
+        dataP.push(pmfPoisson(k, lambda));
+        dataN.push(pmfNBD(k, alpha, beta));
+      }
+      return { labels, dataP, dataN };
+    }
+    const ctx = document.getElementById('freqChart').getContext('2d');
+    const init = generateData(3,1,1,10);
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: init.labels,
+        datasets: [
+          { label: 'Poisson PMF', data: init.dataP, fill: false, borderWidth: 2 },
+          { label: 'NBD PMF', data: init.dataN, fill: false, borderWidth: 2 }
+        ]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: 'k (transactions)' } },
+          y: { title: { display: true, text: 'P(X=k)' } }
+        }
+      }
+    });
+    ['lambda','alpha','beta','maxk'].forEach(id =>
+      document.getElementById(id).addEventListener('input', update)
+    );
+    function update() {
+      const lambda = parseFloat(document.getElementById('lambda').value);
+      const alpha = parseFloat(document.getElementById('alpha').value);
+      const beta = parseFloat(document.getElementById('beta').value);
+      const maxk = parseInt(document.getElementById('maxk').value, 10);
+      document.getElementById('lambdaVal').textContent = lambda;
+      document.getElementById('alphaVal').textContent = alpha;
+      document.getElementById('betaVal').textContent = beta;
+      document.getElementById('maxkVal').textContent = maxk;
+      const d = generateData(lambda, alpha, beta, maxk);
+      chart.data.labels = d.labels;
+      chart.data.datasets[0].data = d.dataP;
+      chart.data.datasets[1].data = d.dataN;
+      chart.update();
+    }
+  </script>
+</body>
+</html>

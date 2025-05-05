@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Beta-Geometric Model Retention & CLV Interactive Diagram</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .controls { margin-bottom: 20px; }
+    .controls label { margin-right: 15px; }
+    .clv-display { margin-top: 20px; font-size: 1.2em; }
+  </style>
+</head>
+<body>
+  <h2>Beta-Geometric Model: Retention Probability & CLV</h2>
+  <div class="controls">
+    <label for="alpha">Alpha: <span id="alphaVal">1.0</span></label>
+    <input type="range" id="alpha" min="0.1" max="10" step="0.1" value="1">
+    <label for="beta">Beta: <span id="betaVal">1.0</span></label>
+    <input type="range" id="beta" min="0.1" max="10" step="0.1" value="1"><br><br>
+    <label for="periods">Periods: <span id="periodsVal">10</span></label>
+    <input type="range" id="periods" min="1" max="50" step="1" value="10"><br><br>
+    <label for="aov">Avg Order Value: $<span id="aovVal">100</span></label>
+    <input type="range" id="aov" min="10" max="1000" step="10" value="100">
+    <label for="discount">Discount Rate: <span id="discountVal">0.10</span></label>
+    <input type="range" id="discount" min="0" max="0.5" step="0.01" value="0.10">
+  </div>
+  <canvas id="retentionChart" width="800" height="400"></canvas>
+  <div class="clv-display">
+    Estimated CLV: $<span id="clvVal">0.00</span>
+  </div>
+  <script>
+    // Compute retention probability for period t
+    function retentionProbability(t, alpha, beta) {
+      return (beta + t - 1) / (alpha + beta + t - 1);
+    }
+
+    // Generate retention data
+    function generateRetention(alpha, beta, periods) {
+      const labels = [];
+      const data = [];
+      for (let t = 1; t <= periods; t++) {
+        labels.push(t);
+        data.push(retentionProbability(t, alpha, beta));
+      }
+      return { labels, data };
+    }
+
+    // Compute CLV
+    function computeCLV(alpha, beta, periods, aov, discount) {
+      let clv = 0;
+      for (let t = 1; t <= periods; t++) {
+        const p = retentionProbability(t, alpha, beta);
+        clv += (p * aov) / Math.pow(1 + discount, t);
+      }
+      return clv;
+    }
+
+    // Initialize chart
+    const ctx = document.getElementById('retentionChart').getContext('2d');
+    const initRet = generateRetention(1.0, 1.0, 10);
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: initRet.labels,
+        datasets: [{
+          label: 'Retention Probability',
+          data: initRet.data,
+          fill: false,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: 'Period (t)' } },
+          y: { title: { display: true, text: 'P(survive at t)' }, min: 0, max: 1 }
+        }
+      }
+    });
+
+    // Update visuals on control change
+    ['alpha', 'beta', 'periods', 'aov', 'discount'].forEach(id => {
+      document.getElementById(id).addEventListener('input', updateAll);
+    });
+
+    function updateAll() {
+      const alpha = parseFloat(document.getElementById('alpha').value);
+      const beta = parseFloat(document.getElementById('beta').value);
+      const periods = parseInt(document.getElementById('periods').value, 10);
+      const aov = parseFloat(document.getElementById('aov').value);
+      const discount = parseFloat(document.getElementById('discount').value);
+
+      document.getElementById('alphaVal').textContent = alpha.toFixed(1);
+      document.getElementById('betaVal').textContent = beta.toFixed(1);
+      document.getElementById('periodsVal').textContent = periods;
+      document.getElementById('aovVal').textContent = aov.toFixed(0);
+      document.getElementById('discountVal').textContent = discount.toFixed(2);
+
+      // Update chart data
+      const ret = generateRetention(alpha, beta, periods);
+      chart.data.labels = ret.labels;
+      chart.data.datasets[0].data = ret.data;
+      chart.update();
+
+      // Compute and display CLV
+      const clv = computeCLV(alpha, beta, periods, aov, discount);
+      document.getElementById('clvVal').textContent = clv.toFixed(2);
+    }
+
+    // Initial CLV display
+    updateAll();
+  </script>
+</body>
+</html>

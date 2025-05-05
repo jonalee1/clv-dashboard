@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gamma-Gamma Model: Monetary Value</title>
+  <script src="https://cdn.jsdelivr.net/npm/mathjs@9.5.2/lib/browser/math.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .controls { margin-bottom: 20px; }
+    .controls label { margin-right: 15px; }
+    .mean-display { margin-top: 20px; font-size: 1.2em; }
+  </style>
+</head>
+<body>
+  <h2>Gamma-Gamma Model: Transaction Value Distribution</h2>
+  <div class="controls">
+    <label for="shape">Shape (p): <span id="shapeVal">2.0</span></label>
+    <input type="range" id="shape" min="0.1" max="10" step="0.1" value="2"><br><br>
+    <label for="scale">Scale (q): <span id="scaleVal">1.0</span></label>
+    <input type="range" id="scale" min="0.1" max="10" step="0.1" value="1"><br><br>
+    <label for="maxx">Max Value: <span id="maxxVal">200</span></label>
+    <input type="range" id="maxx" min="10" max="1000" step="10" value="200">
+  </div>
+  <canvas id="monChart" width="800" height="400"></canvas>
+  <div class="mean-display">
+    Expected Order Value: $<span id="meanVal">2.00</span>
+  </div>
+  <script>
+    function ggPDF(x, shape, scale) {
+      return Math.pow(scale, shape) / math.gamma(shape)
+             * Math.pow(x, shape - 1) * Math.exp(-scale * x);
+    }
+    function generateData(shape, scale, maxx) {
+      const labels = [], data = [];
+      const step = maxx / 200;
+      for (let x = 0; x <= maxx; x += step) {
+        labels.push(x.toFixed(2));
+        data.push(ggPDF(x, shape, scale));
+      }
+      return { labels, data };
+    }
+    const ctx = document.getElementById('monChart').getContext('2d');
+    const init = generateData(2, 1, 200);
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: init.labels,
+        datasets: [{ label: 'Gamma-Gamma PDF', data: init.data, fill: false, borderWidth: 2 }]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: 'Order Value' } },
+          y: { title: { display: true, text: 'Density' } }
+        }
+      }
+    });
+    ['shape', 'scale', 'maxx'].forEach(id =>
+      document.getElementById(id).addEventListener('input', update)
+    );
+    function update() {
+      const shape = parseFloat(document.getElementById('shape').value);
+      const scale = parseFloat(document.getElementById('scale').value);
+      const maxx = parseFloat(document.getElementById('maxx').value);
+      document.getElementById('shapeVal').textContent = shape.toFixed(1);
+      document.getElementById('scaleVal').textContent = scale.toFixed(1);
+      document.getElementById('maxxVal').textContent = maxx;
+      const d = generateData(shape, scale, maxx);
+      chart.data.labels = d.labels;
+      chart.data.datasets[0].data = d.data;
+      chart.update();
+      const mean = shape / scale;
+      document.getElementById('meanVal').textContent = mean.toFixed(2);
+    }
+    update();
+  </script>
+</body>
+</html>
